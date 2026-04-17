@@ -1,0 +1,29 @@
+# Database
+data/historico.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Node
+node_modules/
+frontend/dist/
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+
+*docs/
+# Superpowers internal
+.superpowers/
