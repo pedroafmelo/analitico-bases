@@ -4,6 +4,8 @@ import decimal
 import logging
 from datetime import timezone
 
+import pandas as pd
+
 try:
     import pyodbc
 except ImportError:
@@ -30,16 +32,15 @@ def _inferir_tipo(type_code) -> str:
     return "texto"
 
 
-def _executar_query(cursor, sql: str) -> tuple[str, float, dict | None]:
-    """Executa SQL no cursor, retorna (status_consulta, duracao_seg, row_dict|None)."""
+def _executar_query(conn, sql: str) -> tuple[str, float, dict | None]:
+    """Executa SQL via pd.read_sql, retorna (status_consulta, duracao_seg, row_dict|None)."""
     t0 = time.perf_counter()
     try:
-        cursor.execute(sql)
-        row_tuple = cursor.fetchone()
+        df = pd.read_sql(sql, conn)
         duracao = time.perf_counter() - t0
-        if row_tuple is None:
+        if df.empty:
             return "OK", duracao, {}
-        row = {cursor.description[i][0]: row_tuple[i] for i in range(len(cursor.description))}
+        row = df.iloc[0].to_dict()
         return "OK", duracao, row
     except Exception as e:
         duracao = time.perf_counter() - t0
@@ -88,7 +89,7 @@ def coletar_base(config: BaseConfig, db_conn, conn_string: str) -> dict:
             cursor = odbc_conn.cursor()
 
             # 1. Introspecção de schema
-            cursor.execute(f"SELECT TOP 0 * FROM {config.schema_tabela}")
+            cursor.execute(f"SELECT * FROM {config.schema_tabela} WHERE 1=0")
             columns = [
                 {"nome": col[0], "tipo": _inferir_tipo(col[1])}
                 for col in cursor.description
@@ -96,7 +97,7 @@ def coletar_base(config: BaseConfig, db_conn, conn_string: str) -> dict:
 
             # 2. Query agregada principal
             sql_main = build_aggregate_query(config, columns)
-            status_consulta, duracao, row_main = _executar_query(cursor, sql_main)
+            status_consulta, duracao, row_main = _executar_query(odbc_conn, sql_main)
 
             if status_consulta != "OK" or row_main is None:
                 checagem = _build_erro_checagem(
@@ -109,7 +110,7 @@ def coletar_base(config: BaseConfig, db_conn, conn_string: str) -> dict:
             row_cov = {}
             sql_cov = build_coverage_query(config)
             if sql_cov:
-                _, _, row_cov = _executar_query(cursor, sql_cov)
+                _, _, row_cov = _executar_query(odbc_conn, sql_cov)
                 row_cov = row_cov or {}
 
             # 4. Métricas atuais
